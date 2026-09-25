@@ -1,103 +1,135 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { MatchCard } from "@/components/MatchCard";
+import { useAuth } from "@/components/AuthProvider";
+import { ScoreDialog } from "@/components/ui/ClubDialogs";
+import { EmptyState, PageIntro } from "@/components/ui/PageBits";
+import { createClient } from "@/lib/supabase/client";
+import type { Match } from "@/lib/types";
+
+function closestMatch(list: Match[]) {
+  if (list.length === 0) return null;
+  const now = Date.now();
+  return [...list].sort((a, b) => {
+    const da = Math.abs(new Date(a.match_date).getTime() - now);
+    const db = Math.abs(new Date(b.match_date).getTime() - now);
+    return da - db;
+  })[0];
+}
+
+export default function HomePage() {
+  const { isAdmin, profile, loading } = useAuth();
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [scoreMatch, setScoreMatch] = useState<Match | null>(null);
+
+  async function reload() {
+    const supabase = createClient();
+    const { data } = await supabase.from("matches").select("*");
+    setMatches((data as Match[]) ?? []);
+  }
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  const premiere = closestMatch(matches.filter((m) => m.team_type === "premiere"));
+  const reserve = closestMatch(matches.filter((m) => m.team_type === "reserve"));
+  const empty = !premiere && !reserve;
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main>
+      <PageIntro
+        kicker="FC Chalosse"
+        title={profile ? `Bonjour${profile.first_name ? `, ${profile.first_name}` : ""}` : "Club"}
+        subtitle="Prochains matchs, notes et vie du groupe."
+      />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {!loading && !profile ? (
+        <Link href="/connexion" className="btn-gold mb-5 inline-flex min-w-[180px]">
+          Se connecter
+        </Link>
+      ) : null}
+
+      {empty ? (
+        <EmptyState
+          title="Rien à l’affiche"
+          text="Dès qu’un match est créé, il apparaîtra ici."
+          actionHref={isAdmin ? "/admin/match" : "/calendrier"}
+          actionLabel={isAdmin ? "Créer un match" : "Voir le calendrier"}
+        />
+      ) : (
+        <div className="home-grid">
+          <section>
+            <div className="section-row">
+              <h2 className="section-premiere">Première</h2>
+            </div>
+            {premiere ? (
+              <MatchCard
+                match={premiere}
+                href={`/match/${premiere.id}`}
+                adminActions={
+                  isAdmin ? (
+                    <button
+                      type="button"
+                      className="action-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setScoreMatch(premiere);
+                      }}
+                    >
+                      Modifier le score
+                    </button>
+                  ) : null
+                }
+              />
+            ) : (
+              <p className="muted-line">Aucun match Première.</p>
+            )}
+          </section>
+
+          <section>
+            <div className="section-row">
+              <h2 className="section-reserve">Réserve</h2>
+            </div>
+            {reserve ? (
+              <MatchCard
+                match={reserve}
+                href={`/match/${reserve.id}`}
+                adminActions={
+                  isAdmin ? (
+                    <button
+                      type="button"
+                      className="action-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setScoreMatch(reserve);
+                      }}
+                    >
+                      Modifier le score
+                    </button>
+                  ) : null
+                }
+              />
+            ) : (
+              <p className="muted-line">Aucun match Réserve.</p>
+            )}
+          </section>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      )}
+
+      <div className="quick-links mt-5">
+        <Link href="/classement">Homme du match</Link>
+        <Link href="/aide">Guide</Link>
+        {isAdmin ? <Link href="/admin">Administration</Link> : null}
+      </div>
+
+      <ScoreDialog
+        match={scoreMatch}
+        onClose={() => setScoreMatch(null)}
+        onSaved={reload}
+      />
+    </main>
   );
 }
